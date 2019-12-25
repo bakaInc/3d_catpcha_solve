@@ -3,19 +3,25 @@ import os
 import json
 import numpy as np
 from PIL import Image
-
+import warnings
+import codecs
 
 def load_data(data_dir, flatten=False):
+    print('start read data')
     train_dir = os.path.join(data_dir, 'train')
     test_dir = os.path.join(data_dir, 'test')
 
     meta_info = os.path.join(data_dir, 'meta.json')
-    with open(meta_info, 'r') as f:
+
+    with codecs.open(meta_info, 'r', encoding='UTF-8') as f:
         meta = json.load(f)
+
+    for key, val in meta.items():
+        print(key, val, type(val))
 
     train_images, train_labels = _read_images_and_labels(train_dir, flatten=flatten, **meta)
     test_images, test_labels = _read_images_and_labels(test_dir, flatten=flatten, **meta)
-
+    print('end read data')
     return (
         meta,
         DataSet(train_images, train_labels),
@@ -26,12 +32,16 @@ def load_data(data_dir, flatten=False):
 def _read_images_and_labels(dir_name, flatten, ext='.png', **meta):
     images = []
     labels = []
+    print('files ', len(os.listdir(dir_name)))
     for fn in os.listdir(dir_name):
         if fn.endswith(ext):
             fd = os.path.join(dir_name, fn)
             images.append(_read_image(fd, flatten=flatten, **meta))
             labels.append(_read_label(fd, **meta))
-    return np.array(images), np.array(labels)
+    npImg, npLab = np.array(images), np.array(labels)
+    #print('len', len(npImg), len(npLab), len(images), len(labels))
+    #print('shape', np.shape(npImg), np.shape(npLab))
+    return npImg, npLab
 
 
 def _read_image(filename, flatten, width, height, **extra_meta):
@@ -47,15 +57,18 @@ def _read_image(filename, flatten, width, height, **extra_meta):
 def _read_label(filename, label_choices, **extra_meta):
     basename = os.path.basename(filename)
     labels = basename.split('_')[0]
-
     data = []
 
-    for c in labels:
-        idx = label_choices.index(c)
-        tmp = [0] * len(label_choices)
-        tmp[idx] = 1
-        data.extend(tmp)
+    if len(labels) > 4:
+        labels = str(bytearray(labels, 'utf8').rstrip().lstrip(b'\xEF\xBB\xBF').decode('utf-8'))###############
 
+    for c in labels:
+        #print('|' + labels + '|', len(labels), type(labels), '|' + c + '|', len(c), label_choices, labels.encode('utf-8'))
+        if c is not '' or c is not ' ':
+            idx = label_choices.index(c)
+            tmp = [0] * len(label_choices)
+            tmp[idx] = 1
+            data.extend(tmp)
     return data
 
 
@@ -63,8 +76,7 @@ class DataSet(object):
     """Provide `next_batch` method, which returns the next `batch_size` examples from this data set."""
 
     def __init__(self, images, labels):
-        assert images.shape[0] == labels.shape[0], (
-            'images.shape: %s labels.shape: %s' % (images.shape, labels.shape))
+        assert images.shape[0] == labels.shape[0], ('images.shape: %s labels.shape: %s' % (images.shape, labels.shape))
         self._num_examples = images.shape[0]
 
         self._images = images
@@ -90,7 +102,7 @@ class DataSet(object):
         return self._epochs_completed
 
     def next_batch(self, batch_size):
-
+        #print('num examples', self._num_examples)
         assert batch_size <= self._num_examples
 
         if self._index_in_epoch + batch_size > self._num_examples:
@@ -124,5 +136,5 @@ def display_debug_info(meta, train_data, test_data):
 
 if __name__ == '__main__':
     import sys
-    ret1 = load_data(data_dir=sys.argv[1])
-    display_debug_info(*ret1)
+    ret = load_data(data_dir=sys.argv[1])
+    display_debug_info(*ret)
